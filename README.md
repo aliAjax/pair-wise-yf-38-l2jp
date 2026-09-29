@@ -24,7 +24,17 @@ python3 app.py --db ./data.db --port 8304
 
 ## 核心对象
 
-- `dataset`：受控数据集；`application`：访问申请；`grant`：限时数据使用凭证。
+- `dataset`：受控数据集；`application`：访问申请（可绑定多个数据集）；`grant`：限时数据使用凭证。
+
+## 访问范围与凭证
+
+- 申请创建时提交 `dataset_ids`（数组，自动去重排序）；旧字段 `dataset_id` 仍被接受，旧数据在启动时自动补全为 `dataset_ids`。
+- 审批通过的瞬间，申请范围冻结到 `approved_scope`（同时记录 `scope_application_version`）。之后再用 `update_scope` 修改申请，不会改变已发凭证的范围。
+- 创建 `grant` 时无需重复提交数据集，凭证自动复制审批时的冻结范围；显式提交的范围若超出冻结范围会被拒绝。
+- 数据集被 `restrict`、申请被 `withdraw` 时，引用相关范围且处于 `active` 的凭证自动转为 `suspended`（停用但可查看、可 `revoke`）；停用审计明细中保留原冻结范围。
+- `update_scope` 必须携带 `expected_version`：先提交者生效，后提交者收到 `409 ConflictError`，重新读取最新版本后再确认提交。
+- 同一 `applicant_id` 对完全相同的数据集范围和 `purpose` 重复提交在途申请（draft/submitted/under_review/approved）时，直接返回第一次生成的申请，不新建。
+
 
 ## 主要接口
 

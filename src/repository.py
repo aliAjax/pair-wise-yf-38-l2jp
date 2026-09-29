@@ -3,6 +3,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from .domain import ConflictError, NotFoundError
+from .rules import normalize_dataset_ids
 
 
 def utcnow():
@@ -55,6 +56,43 @@ class SQLiteRepository:
                     PRIMARY KEY(actor_id, idem_key)
                 );
             """)
+            self._migrate_legacy_scopes(connection)
+
+    @staticmethod
+    def _migrate_legacy_scopes(connection):
+        """Upgrade legacy single-dataset applications/grants in place.
+
+        Old records carried one ``dataset_id``. We backfill the sorted
+        ``dataset_ids`` list and, for applications already approved before the
+        upgrade, freeze the current scope as ``approved_scope`` so their
+        existing credentials keep the semantics they were issued under.
+        Records stay visible and revocable; the legacy field is retained.
+        """
+        rows = connection.execute(
+            "SELECT id, kind, status, version, data FROM entities "
+            "WHERE kind IN ('application', 'grant')"
+        ).fetchall()
+        now = utcnow()
+        for row in rows:
+            data = json.loads(row["data"])
+            if data.get("dataset_ids"):
+                continue
+            try:
+                scope = normalize_dataset_ids(data)
+            except Exception:
+                continue
+            if not scope:
+                continue
+            data["dataset_ids"] = scope
+            if row["kind"] == "application" and row["status"] == "approved" and not data.get(
+                "approved_scope"
+            ):
+                data["approved_scope"] = list(scope)
+                data["scope_application_version"] = int(row["version"])
+            connection.execute(
+                "UPDATE entities SET data = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(data, ensure_ascii=False, sort_keys=True), now, row["id"]),
+            )
 
     @staticmethod
     def _entity_from_row(row):

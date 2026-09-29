@@ -23,6 +23,7 @@ GET  /api/&lt;kind&gt;
 POST /api/&lt;kind&gt;
 GET  /api/entities/&lt;id&gt;
 POST /api/entities/&lt;id&gt;/actions</pre>
+  <p>申请可用 <code>update_scope</code> 调整多数据集范围（须带 <code>expected_version</code>）；审批通过时范围冻结进凭证，数据集被限制或申请撤回时关联凭证自动停用。</p>
 </main>
 <script>
 async function checkHealth() {
